@@ -82,7 +82,6 @@ namespace SpecFlowTestGenerator.Browser
             try
             {
                 Logger.Log("Initializing DevTools session...");
-                
                 // Get IDevTools interface from driver
                 if (!TryGetDevToolsInterface(driver, out var devTools))
                 {
@@ -96,13 +95,12 @@ namespace SpecFlowTestGenerator.Browser
                 }
 
                 Logger.Log("SUCCESS: DevTools session acquired");
-                
                 // Try to initialize with supported CDP versions
                 return await InitializeBasedOnVersion();
             }
             catch (Exception ex)
             {
-                Logger.Log($"FAIL: DevTools session initialization error: {ex.Message}");
+                Logger.Log($"FAIL: DevTools session initialization error: {ex.Message}\n{ex}");
                 return false;
             }
         }
@@ -147,9 +145,44 @@ namespace SpecFlowTestGenerator.Browser
                 Logger.Log("SUCCESS: Got DevTools session");
                 return true;
             }
-            catch (Exception ex)
+            catch (WebDriverException ex)
             {
-                Logger.Log($"FAIL: Error getting DevTools session: {ex.Message}");
+                bool isVersionMismatch = ex.Message.Contains("DevTools version is not in the supported range") || 
+                                       (ex.InnerException != null && ex.InnerException.Message.Contains("DevTools version is not in the supported range"));
+
+                if (isVersionMismatch)
+                {
+                    Logger.Log($"WARNING: Version mismatch detected: {ex.InnerException?.Message ?? ex.Message}");
+                    Logger.Log("Attempting to force V131 protocol...");
+
+                    try
+                    {
+                        // Create options to force V131
+                        var options = new DevToolsOptions
+                        {
+                            ProtocolVersion = 131
+                        };
+                        
+                        session = devTools.GetDevToolsSession(options);
+                        
+                        if (session == null)
+                        {
+                            Logger.Log("FAIL: GetDevToolsSession(options) returned null");
+                            return false;
+                        }
+                        
+                        Logger.Log("SUCCESS: Got DevTools session (Forced V131)");
+                        return true;
+                    }
+                    catch (Exception forceEx)
+                    {
+                         Logger.Log($"FAIL: Could not force V131 session: {forceEx.Message}");
+                         session = null;
+                         return false;
+                    }
+                }
+                
+                Logger.Log($"FAIL: Error getting DevTools session: {ex.Message}\n{ex}");
                 session = null;
                 return false;
             }
@@ -163,9 +196,9 @@ namespace SpecFlowTestGenerator.Browser
             Logger.Log("Detecting Chrome DevTools Protocol version...");
             
             // Try supported versions in order (newest first)
-            if (await TryInitializeV136())
+            if (await TryInitializeV131())
             {
-                Logger.Log("Successfully initialized with CDP V136");
+                Logger.Log("Successfully initialized with CDP V131");
                 return true;
             }
             
@@ -174,98 +207,98 @@ namespace SpecFlowTestGenerator.Browser
             // if (await TryInitializeV134()) return true;
             
             Logger.Log("FAIL: No supported DevTools Protocol version found");
-            Logger.Log("Supported versions: V136");
+            Logger.Log("Supported versions: V131");
             return false;
         }
 
         /// <summary>
-        /// Tries to initialize with Chrome DevTools Protocol version 136
+        /// Tries to initialize with Chrome DevTools Protocol version 131
         /// </summary>
-        private async Task<bool> TryInitializeV136()
+        private async Task<bool> TryInitializeV131()
         {
             try
             {
-                Logger.Log("Attempting V136 initialization...");
+                Logger.Log("Attempting V131 initialization...");
                 
                 // Get version-specific domains
-                var domains = _session!.GetVersionSpecificDomains<OpenQA.Selenium.DevTools.V136.DevToolsSessionDomains>();
+                var domains = _session!.GetVersionSpecificDomains<OpenQA.Selenium.DevTools.V131.DevToolsSessionDomains>();
                 
                 if (domains == null)
                 {
-                    Logger.Log("V136: Failed to get version-specific domains");
+                    Logger.Log("V131: Failed to get version-specific domains");
                     return false;
                 }
 
-                Logger.Log("V136: Got version-specific domains");
+                Logger.Log("V131: Got version-specific domains");
                 
                 // Enable required domains
-                await EnableV136Domains(domains);
+                await EnableV131Domains(domains);
                 
                 // Add JavaScript binding for communication
-                await AddV136Binding(domains);
+                await AddV131Binding(domains);
                 
                 // Set up event adapters
-                SetupV136Adapters(domains);
+                SetupV131Adapters(domains);
                 
                 // Store domains for cleanup
                 _domains = domains;
                 
-                Logger.Log("SUCCESS: V136 initialization complete");
+                Logger.Log("SUCCESS: V131 initialization complete");
                 return true;
             }
             catch (Exception ex)
             {
-                Logger.Log($"V136: Initialization failed - {ex.Message}");
+                Logger.Log($"V131: Initialization failed - {ex.Message}");
                 return false;
             }
         }
 
         /// <summary>
-        /// Enables required V136 domains (Page and Runtime)
+        /// Enables required V131 domains (Page and Runtime)
         /// </summary>
-        private async Task EnableV136Domains(OpenQA.Selenium.DevTools.V136.DevToolsSessionDomains domains)
+        private async Task EnableV131Domains(OpenQA.Selenium.DevTools.V131.DevToolsSessionDomains domains)
         {
-            Logger.Log("V136: Enabling Page domain...");
-            await domains.Page.Enable(new OpenQA.Selenium.DevTools.V136.Page.EnableCommandSettings());
+            Logger.Log("V131: Enabling Page domain...");
+            await domains.Page.Enable(new OpenQA.Selenium.DevTools.V131.Page.EnableCommandSettings());
             
-            Logger.Log("V136: Enabling Runtime domain...");
-            await domains.Runtime.Enable(new OpenQA.Selenium.DevTools.V136.Runtime.EnableCommandSettings());
+            Logger.Log("V131: Enabling Runtime domain...");
+            await domains.Runtime.Enable(new OpenQA.Selenium.DevTools.V131.Runtime.EnableCommandSettings());
             
-            Logger.Log("V136: Domains enabled successfully");
+            Logger.Log("V131: Domains enabled successfully");
         }
 
         /// <summary>
         /// Adds the JavaScript binding for C# communication
         /// </summary>
-        private async Task AddV136Binding(OpenQA.Selenium.DevTools.V136.DevToolsSessionDomains domains)
+        private async Task AddV131Binding(OpenQA.Selenium.DevTools.V131.DevToolsSessionDomains domains)
         {
-            Logger.Log($"V136: Adding JavaScript binding '{JsBindingName}'...");
+            Logger.Log($"V131: Adding JavaScript binding '{JsBindingName}'...");
             
             await domains.Runtime.AddBinding(
-                new OpenQA.Selenium.DevTools.V136.Runtime.AddBindingCommandSettings 
+                new OpenQA.Selenium.DevTools.V131.Runtime.AddBindingCommandSettings 
                 { 
                     Name = JsBindingName 
                 });
             
-            Logger.Log("V136: JavaScript binding added successfully");
+            Logger.Log("V131: JavaScript binding added successfully");
         }
 
         /// <summary>
-        /// Sets up event and injection adapters for V136
+        /// Sets up event and injection adapters for V131
         /// </summary>
-        private void SetupV136Adapters(OpenQA.Selenium.DevTools.V136.DevToolsSessionDomains domains)
+        private void SetupV131Adapters(OpenQA.Selenium.DevTools.V131.DevToolsSessionDomains domains)
         {
-            Logger.Log("V136: Setting up event adapters...");
+            Logger.Log("V131: Setting up event adapters...");
             
             // Create and register event adapter
-            _eventAdapter = new V136EventAdapter(domains);
+            _eventAdapter = new V131EventAdapter(domains);
             _eventHandlers!.SetAdapter(_eventAdapter);
             
             // Set up injection adapter
-            var injectionAdapter = new V136JavaScriptInjectionAdapter(domains);
+            var injectionAdapter = new V131JavaScriptInjectionAdapter(domains);
             _jsInjector!.SetAdapter(injectionAdapter);
             
-            Logger.Log("V136: Event adapters configured");
+            Logger.Log("V131: Event adapters configured");
         }
 
         /// <summary>
@@ -321,10 +354,10 @@ namespace SpecFlowTestGenerator.Browser
                 using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
                 
                 // Remove binding based on active version
-                if (_domains is OpenQA.Selenium.DevTools.V136.DevToolsSessionDomains v136)
+                if (_domains is OpenQA.Selenium.DevTools.V131.DevToolsSessionDomains v131)
                 {
-                    await v136.Runtime.RemoveBinding(
-                        new OpenQA.Selenium.DevTools.V136.Runtime.RemoveBindingCommandSettings 
+                    await v131.Runtime.RemoveBinding(
+                        new OpenQA.Selenium.DevTools.V131.Runtime.RemoveBindingCommandSettings 
                         { 
                             Name = JsBindingName 
                         }, 

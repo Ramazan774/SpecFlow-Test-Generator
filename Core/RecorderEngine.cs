@@ -22,12 +22,10 @@ namespace SpecFlowTestGenerator.Core
         private readonly RecorderState _state;
         private readonly EventHandlers _eventHandlers;
         private readonly JavaScriptInjector _jsInjector;
-        private readonly DevToolsSessionManager _sessionManager;
+        private readonly BrowserService _browserService; // New Dependency
         private readonly SpecFlowGenerator _specFlowGenerator;
         private readonly ActionDeduplicator _deduplicator;
 
-        private IWebDriver? _driver;
-        private ChromeDriverService? _chromeService;
         private bool _disposed;
 
         #endregion
@@ -64,20 +62,16 @@ namespace SpecFlowTestGenerator.Core
             RecorderState state,
             EventHandlers eventHandlers,
             JavaScriptInjector jsInjector,
-            DevToolsSessionManager sessionManager,
+            BrowserService browserService,
             SpecFlowGenerator specFlowGenerator,
             ActionDeduplicator deduplicator)
         {
             _state = state ?? throw new ArgumentNullException(nameof(state));
             _eventHandlers = eventHandlers ?? throw new ArgumentNullException(nameof(eventHandlers));
             _jsInjector = jsInjector ?? throw new ArgumentNullException(nameof(jsInjector));
-            _sessionManager = sessionManager ?? throw new ArgumentNullException(nameof(sessionManager));
+            _browserService = browserService ?? throw new ArgumentNullException(nameof(browserService));
             _specFlowGenerator = specFlowGenerator ?? throw new ArgumentNullException(nameof(specFlowGenerator));
             _deduplicator = deduplicator ?? throw new ArgumentNullException(nameof(deduplicator));
-
-            // Wire up circular dependencies
-            _jsInjector.SetSessionManager(_sessionManager);
-            _sessionManager.SetDependencies(_eventHandlers, _jsInjector);
 
             Logger.Log("RecorderEngine initialized with dependency injection");
         }
@@ -111,22 +105,14 @@ namespace SpecFlowTestGenerator.Core
             {
                 Logger.Log("Starting RecorderEngine initialization...");
 
-                // Step 1: Launch Chrome browser
-                if (!await InitializeBrowser())
+                // Step 1: Launch Browser and Connect DevTools via BrowserService
+                if (!await _browserService.LaunchAndConnectAsync())
                 {
-                    Logger.Log("Failed to initialize browser");
+                    Logger.Log("Failed to launch browser and connect DevTools");
                     return false;
                 }
 
-                // Step 2: Set up DevTools session
-                if (!await InitializeDevTools())
-                {
-                    Logger.Log("Failed to initialize DevTools");
-                    await CleanUp();
-                    return false;
-                }
-
-                // Step 3: Inject JavaScript listeners
+                // Step 2: Inject JavaScript listeners
                 if (!await InitializeJavaScriptListeners())
                 {
                     Logger.Log("Failed to initialize JavaScript listeners");
@@ -142,70 +128,6 @@ namespace SpecFlowTestGenerator.Core
                 Logger.Log($"FAIL: Initialization error: {ex.Message}");
                 Logger.Log($"Stack trace: {ex}");
                 await CleanUp();
-                return false;
-            }
-        }
-
-        /// <summary>
-        /// Initializes the Chrome browser
-        /// </summary>
-        private async Task<bool> InitializeBrowser()
-        {
-            try
-            {
-                var (driver, service) = BrowserFactory.CreateChromeDriver();
-                
-                if (driver == null)
-                {
-                    Logger.Log("BrowserFactory returned null driver");
-                    return false;
-                }
-
-                _driver = driver;
-                _chromeService = service;
-
-                // Give browser a moment to stabilize
-                await Task.Delay(500);
-
-                Logger.Log("Browser initialized successfully");
-                return true;
-            }
-            catch (Exception ex)
-            {
-                Logger.Log($"Browser initialization failed: {ex.Message}");
-                return false;
-            }
-        }
-
-        /// <summary>
-        /// Initializes the DevTools session for CDP communication
-        /// </summary>
-        private async Task<bool> InitializeDevTools()
-        {
-            if (_driver == null)
-            {
-                Logger.Log("Cannot initialize DevTools: driver is null");
-                return false;
-            }
-
-            try
-            {
-                bool success = await _sessionManager.InitializeSession(_driver);
-                
-                if (success)
-                {
-                    Logger.Log("DevTools session initialized successfully");
-                }
-                else
-                {
-                    Logger.Log("DevTools session initialization returned false");
-                }
-
-                return success;
-            }
-            catch (Exception ex)
-            {
-                Logger.Log($"DevTools initialization failed: {ex.Message}");
                 return false;
             }
         }
@@ -388,6 +310,21 @@ namespace SpecFlowTestGenerator.Core
         }
 
         /// <summary>
+        /// Renames the current feature
+        /// </summary>
+        public void RenameFeature(string newName)
+        {
+            if (string.IsNullOrWhiteSpace(newName))
+                return;
+
+            string sanitized = FileHelper.SanitizeForFileName(newName);
+            string oldName = _state.CurrentFeatureName;
+            _state.CurrentFeatureName = sanitized;
+            
+            Logger.Log($"Renamed feature from '{oldName}' to '{sanitized}'");
+        }
+
+        /// <summary>
         /// Handles the 'clear' command - clears current feature actions
         /// </summary>
         private void HandleClearCommand()
@@ -420,12 +357,6 @@ namespace SpecFlowTestGenerator.Core
         /// </summary>
         private void HandleNavigateCommand(string command)
         {
-            if (_driver == null)
-            {
-                Logger.Log("Cannot navigate: browser not initialized");
-                return;
-            }
-
             string url = command.Substring("navigate ".Length).Trim();
             
             if (string.IsNullOrWhiteSpace(url))
@@ -442,15 +373,7 @@ namespace SpecFlowTestGenerator.Core
                 url = "https://" + url;
             }
 
-            try
-            {
-                Logger.Log($"Manually navigating to: {url}");
-                _driver.Navigate().GoToUrl(url);
-            }
-            catch (Exception ex)
-            {
-                Logger.Log($"Navigation failed: {ex.Message}");
-            }
+            _browserService.NavigateTo(url);
         }
 
         #endregion
@@ -500,11 +423,39 @@ namespace SpecFlowTestGenerator.Core
                     Logger.Log($"Removed {removed} duplicate/redundant actions");
                 }
 
-                // Generate files
-                string outputDir = Environment.CurrentDirectory;
-                _specFlowGenerator.GenerateFiles(deduplicated, _state.CurrentFeatureName, outputDir);
+                // Determine output paths
+            // When running 'dotnet run', CurrentDirectory is the project root
+            string projectRoot = Directory.GetCurrentDirectory();
+            
+            // Define output directories
+            string featuresDir = Path.Combine(projectRoot, "SpecFlowTests", "Features");
+            string stepsDir = Path.Combine(projectRoot, "SpecFlowTests", "Steps");
+            
+            // Ensure directories exist
+            Directory.CreateDirectory(featuresDir);
+            Directory.CreateDirectory(stepsDir);
+
+            // Generate content
+            (string featureContent, string stepsContent) = _specFlowGenerator.GenerateFiles(deduplicated, _state.CurrentFeatureName);
+
+            string featureFilePath = Path.Combine(featuresDir, $"{_state.CurrentFeatureName}.feature");
+            string stepsFilePath = Path.Combine(stepsDir, $"{_state.CurrentFeatureName}Steps.cs");
+
+            try
+            {
+                File.WriteAllText(featureFilePath, featureContent);
+                ConsoleHelper.WriteSuccess($"Generated: {featureFilePath}");
+
+                File.WriteAllText(stepsFilePath, stepsContent);
+                ConsoleHelper.WriteSuccess($"Generated: {stepsFilePath}");
                 
-                Logger.Log($"SUCCESS: Files generated in {outputDir}");
+                Logger.Log($"Files generated in {featuresDir} and {stepsDir}");
+            }
+            catch (Exception ex)
+            {
+                Logger.Log($"ERROR: Failed to generate files: {ex.Message}");
+                Logger.Log($"Stack trace: {ex}");
+            }
             }
             catch (Exception ex)
             {
@@ -550,43 +501,8 @@ namespace SpecFlowTestGenerator.Core
 
             try
             {
-                // Clean up DevTools session
-                await _sessionManager.CleanUpSession();
-
-                // Quit and dispose driver
-                if (_driver != null)
-                {
-                    try
-                    {
-                        _driver.Quit();
-                        _driver.Dispose();
-                    }
-                    catch (Exception ex)
-                    {
-                        Logger.Log($"Error during driver cleanup: {ex.Message}");
-                    }
-                    finally
-                    {
-                        _driver = null;
-                    }
-                }
-
-                // Dispose Chrome service
-                if (_chromeService != null)
-                {
-                    try
-                    {
-                        _chromeService.Dispose();
-                    }
-                    catch (Exception ex)
-                    {
-                        Logger.Log($"Error during service cleanup: {ex.Message}");
-                    }
-                    finally
-                    {
-                        _chromeService = null;
-                    }
-                }
+                // BrowserService handles all browser and DevTools cleanup
+                _browserService.Dispose();
 
                 Logger.Log("Cleanup completed successfully");
             }
@@ -594,6 +510,8 @@ namespace SpecFlowTestGenerator.Core
             {
                 Logger.Log($"Error during cleanup: {ex.Message}");
             }
+            
+            await Task.CompletedTask;
         }
 
         /// <summary>

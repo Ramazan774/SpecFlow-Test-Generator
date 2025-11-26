@@ -26,12 +26,15 @@ namespace SpecFlowTestGenerator.CodeGeneration
         /// <summary>
         /// Generate SpecFlow files from recorded actions
         /// </summary>
-        public void GenerateFiles(List<RecordedAction> actions, string featureName, string outputDir)
+        /// <summary>
+        /// Generate SpecFlow files content from recorded actions
+        /// </summary>
+        public (string FeatureContent, string StepsContent) GenerateFiles(List<RecordedAction> actions, string featureName)
         {
             if (actions == null || actions.Count == 0)
             {
                 Logger.Log($"No actions to generate files for feature '{featureName}'.");
-                return;
+                return (string.Empty, string.Empty);
             }
 
             string safeFeatureName = FileHelper.SanitizeForFileName(featureName);
@@ -45,22 +48,12 @@ namespace SpecFlowTestGenerator.CodeGeneration
                 // Create steps file content
                 string stepsContent = _stepsBuilder.BuildStepsFileContent(actions, stepsClassName);
 
-                // Ensure directory exists
-                FileHelper.EnsureDirectoryExists(outputDir);
-                
-                // Write files
-                string featureFilePath = Path.Combine(outputDir, $"{safeFeatureName}.feature");
-                string stepsFilePath = Path.Combine(outputDir, $"{stepsClassName}.cs");
-                
-                File.WriteAllText(featureFilePath, featureContent);
-                File.WriteAllText(stepsFilePath, stepsContent);
-                
-                Logger.Log($"Generated: {featureFilePath}");
-                Logger.Log($"Generated: {stepsFilePath}");
+                return (featureContent, stepsContent);
             }
             catch (Exception ex)
             {
                 Logger.Log($"ERROR generating files: {ex.Message}");
+                return (string.Empty, string.Empty);
             }
         }
     }

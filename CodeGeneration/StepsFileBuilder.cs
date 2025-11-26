@@ -27,11 +27,14 @@ namespace SpecFlowTestGenerator.CodeGeneration
             stepsFile.AppendLine("using System.Threading;");
             stepsFile.AppendLine();
             
-            // Add class definition
-            stepsFile.AppendLine("[Binding]");
-            stepsFile.AppendLine($"public class {stepsClassName}");
+            stepsFile.AppendLine("namespace SpecFlowTests.Steps");
             stepsFile.AppendLine("{");
-            stepsFile.AppendLine("    private readonly IWebDriver _driver;");
+            
+            // Add class definition
+            stepsFile.AppendLine("    [Binding]");
+            stepsFile.AppendLine($"    public class {stepsClassName}");
+            stepsFile.AppendLine("    {");
+            stepsFile.AppendLine("        private readonly IWebDriver _driver;");
             stepsFile.AppendLine();
             
             // Add constructor
@@ -81,6 +84,7 @@ namespace SpecFlowTestGenerator.CodeGeneration
             AddWaitForElementHelper(stepsFile);
             
             // Close class
+            stepsFile.AppendLine("    }");
             stepsFile.AppendLine("}");
             
             return stepsFile.ToString();
@@ -572,6 +576,14 @@ namespace SpecFlowTestGenerator.CodeGeneration
             s.AppendLine("            Console.WriteLine($\"Looking for element with {selectorType}='{selectorValue}'\");");
             s.AppendLine("            var element = wait.Until(driver => {");
             s.AppendLine("                var foundElement = driver.FindElement(by);");
+            s.AppendLine("                ");
+            s.AppendLine("                // Special handling for checkboxes/radios that might be hidden by custom UI");
+            s.AppendLine("                if (!foundElement.Displayed && foundElement.TagName.ToLower() == \"input\" && ");
+            s.AppendLine("                   (foundElement.GetAttribute(\"type\") == \"checkbox\" || foundElement.GetAttribute(\"type\") == \"radio\"))");
+            s.AppendLine("                {");
+            s.AppendLine("                    return foundElement;");
+            s.AppendLine("                }");
+            s.AppendLine("                ");
             s.AppendLine("                return foundElement.Displayed ? foundElement : null;");
             s.AppendLine("            });");
             s.AppendLine("            ");

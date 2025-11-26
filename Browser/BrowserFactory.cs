@@ -17,6 +17,9 @@ namespace SpecFlowTestGenerator.Browser
             
             try
             {
+                // Use WebDriverManager to setup the matching ChromeDriver
+                new WebDriverManager.DriverManager().SetUpDriver(new WebDriverManager.DriverConfigs.Impl.ChromeConfig());
+
                 // Create Chrome driver service
                 ChromeDriverService service = ChromeDriverService.CreateDefaultService();
                 service.EnableVerboseLogging = true;
@@ -25,7 +28,9 @@ namespace SpecFlowTestGenerator.Browser
                 
                 // Create Chrome options
                 ChromeOptions options = new ChromeOptions();
-                // Add any required options here
+                options.AddArgument("--no-sandbox");
+                options.AddArgument("--disable-dev-shm-usage");
+                options.AddArgument("--remote-allow-origins=*");
                 
                 // Create and return the driver with its service
                 IWebDriver driver = new ChromeDriver(service, options);

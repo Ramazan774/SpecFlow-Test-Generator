@@ -98,7 +98,7 @@
           }
         }
       },
-      "Selenium.WebDriver/4.32.0": {
+      "Selenium.WebDriver/4.27.0": {
         "type": "package",
         "compile": {
           "lib/net8.0/WebDriver.dll": {
@@ -112,6 +112,12 @@
         },
         "build": {
           "buildTransitive/Selenium.WebDriver.targets": {}
+        }
+      },
+      "Selenium.WebDriver.ChromeDriver/131.0.6778.20400": {
+        "type": "package",
+        "build": {
+          "build/Selenium.WebDriver.ChromeDriver.targets": {}
         }
       },
       "SharpZipLib/1.4.2": {
@@ -446,10 +452,10 @@
         "packageIcon.png"
       ]
     },
-    "Selenium.WebDriver/4.32.0": {
-      "sha512": "7mocv9JMt3jth7nkfrKISv23dwRR8+1/QE0REyNco+L6A9tSFdR+makPZpGKSE8ppTt8JMyvFPQLgRnPzRL5+w==",
+    "Selenium.WebDriver/4.27.0": {
+      "sha512": "bMIpqwpBfYLa1lh8gPVa6A1i9LeWNsfc2mR9why0DutEKI7ck3GVxzco1bB/8bv+7IA6rk4sR9WpZLRUnH/AAw==",
       "type": "package",
-      "path": "selenium.webdriver/4.32.0",
+      "path": "selenium.webdriver/4.27.0",
       "files": [
         ".nupkg.metadata",
         ".signature.p7s",
@@ -464,8 +470,32 @@
         "manager/linux/selenium-manager",
         "manager/macos/selenium-manager",
         "manager/windows/selenium-manager.exe",
-        "selenium.webdriver.4.32.0.nupkg.sha512",
+        "selenium.webdriver.4.27.0.nupkg.sha512",
         "selenium.webdriver.nuspec"
+      ]
+    },
+    "Selenium.WebDriver.ChromeDriver/131.0.6778.20400": {
+      "sha512": "K3U9GgnAJES8DJEsjiDhHC7M5yBoJAKmBi+FO8Gy+NEhKI+LFSvC6du5IQ8/t9yYV59obU6DBVraYxNgcxXXpg==",
+      "type": "package",
+      "path": "selenium.webdriver.chromedriver/131.0.6778.20400",
+      "files": [
+        ".nupkg.metadata",
+        ".signature.p7s",
+        "LICENSE",
+        "README.md",
+        "build/DefinePropertiesChromeDriver.targets",
+        "build/Selenium.WebDriver.ChromeDriver.targets",
+        "driver/linux64/LICENSE.chromedriver",
+        "driver/linux64/chromedriver",
+        "driver/mac64/LICENSE.chromedriver",
+        "driver/mac64/chromedriver",
+        "driver/mac64arm/LICENSE.chromedriver",
+        "driver/mac64arm/chromedriver",
+        "driver/win32/LICENSE.chromedriver",
+        "driver/win32/chromedriver.exe",
+        "nupkg-icon.png",
+        "selenium.webdriver.chromedriver.131.0.6778.20400.nupkg.sha512",
+        "selenium.webdriver.chromedriver.nuspec"
       ]
     },
     "SharpZipLib/1.4.2": {
@@ -779,7 +809,8 @@
     "net8.0": [
       "Microsoft.Extensions.DependencyInjection >= 9.0.9",
       "Newtonsoft.Json >= 13.0.3",
-      "Selenium.WebDriver >= 4.32.0",
+      "Selenium.WebDriver >= 4.27.0",
+      "Selenium.WebDriver.ChromeDriver >= 131.0.6778.20400",
       "System.Text.Json >= 9.0.5",
       "WebDriverManager >= 2.17.1"
     ]
@@ -837,7 +868,11 @@
           },
           "Selenium.WebDriver": {
             "target": "Package",
-            "version": "[4.32.0, )"
+            "version": "[4.27.0, )"
+          },
+          "Selenium.WebDriver.ChromeDriver": {
+            "target": "Package",
+            "version": "[131.0.6778.20400, )"
           },
           "System.Text.Json": {
             "target": "Package",

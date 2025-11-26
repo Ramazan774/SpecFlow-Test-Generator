@@ -82,6 +82,30 @@ namespace SpecFlowTestGenerator
         {
             var services = new ServiceCollection();
 
+            // Register recorder engine
+            services.AddSingleton<RecorderEngine>(sp =>
+            {
+                var state = sp.GetRequiredService<RecorderState>();
+                var eventHandlers = sp.GetRequiredService<EventHandlers>();
+                var jsInjector = sp.GetRequiredService<JavaScriptInjector>();
+                var sessionManager = sp.GetRequiredService<DevToolsSessionManager>();
+                
+                // Wire up circular dependencies
+                jsInjector.SetSessionManager(sessionManager);
+                sessionManager.SetDependencies(eventHandlers, jsInjector);
+
+                var browserService = sp.GetRequiredService<BrowserService>();
+                var generator = sp.GetRequiredService<SpecFlowGenerator>();
+                var deduplicator = sp.GetRequiredService<ActionDeduplicator>();
+                
+                return new RecorderEngine(
+                    state,
+                    eventHandlers,
+                    jsInjector,
+                    browserService,
+                    generator,
+                    deduplicator);
+            });
             // Register core services
             services.AddSingleton<RecorderState>(sp => new RecorderState("DefaultFeature"));
             services.AddSingleton<EventHandlers>(sp => 
@@ -90,6 +114,7 @@ namespace SpecFlowTestGenerator
             // Register components with circular dependencies
             services.AddSingleton<JavaScriptInjector>();
             services.AddSingleton<DevToolsSessionManager>();
+            services.AddSingleton<BrowserService>(); // Register BrowserService
             
             // Register generators
             services.AddSingleton<FeatureFileBuilder>();
@@ -97,24 +122,8 @@ namespace SpecFlowTestGenerator
             services.AddSingleton<SpecFlowGenerator>();
             services.AddSingleton<ActionDeduplicator>();
             
-            // Register recorder engine
-            services.AddSingleton<RecorderEngine>(sp =>
-            {
-                var state = sp.GetRequiredService<RecorderState>();
-                var eventHandlers = sp.GetRequiredService<EventHandlers>();
-                var jsInjector = sp.GetRequiredService<JavaScriptInjector>();
-                var sessionManager = sp.GetRequiredService<DevToolsSessionManager>();
-                var generator = sp.GetRequiredService<SpecFlowGenerator>();
-                var deduplicator = sp.GetRequiredService<ActionDeduplicator>();
-                
-                return new RecorderEngine(
-                    state,
-                    eventHandlers,
-                    jsInjector,
-                    sessionManager,
-                    generator,
-                    deduplicator);
-            });
+
+
 
             return services.BuildServiceProvider();
         }
@@ -159,15 +168,15 @@ namespace SpecFlowTestGenerator
 
             Console.WriteLine();
             ConsoleHelper.WriteInfo("Initializing recorder...");
-            
+
             using var progress = new ProgressIndicator("Starting Chrome browser");
-            
+
             try
             {
                 progress.UpdateStatus("Launching Chrome...");
-                
+
                 bool initialized = await _recorder.Initialize();
-                
+
                 if (initialized)
                 {
                     progress.Complete("Recorder initialized successfully");
@@ -177,6 +186,10 @@ namespace SpecFlowTestGenerator
                 else
                 {
                     progress.Fail("Initialization failed");
+                    var lastLog = Logger.GetLogBuffer().LastOrDefault();
+                    if (!string.IsNullOrEmpty(lastLog))
+                        ConsoleHelper.WriteError($"Last error: {lastLog}");
+                    ConsoleHelper.WriteError("If you see a DevTools error above, basic recording may still work, but advanced features will be disabled.\nTry updating Chrome/ChromeDriver, or run with sudo if on macOS.");
                     return false;
                 }
             }
@@ -185,6 +198,7 @@ namespace SpecFlowTestGenerator
                 progress.Fail($"Initialization error: {ex.Message}");
                 return false;
             }
+            
         }
 
         /// <summary>
@@ -308,9 +322,39 @@ namespace SpecFlowTestGenerator
                     // Handle commands
                     if (command == "stop")
                     {
+                        // Check if we should prompt for a name
+                        if (_recorder.GetCurrentFeatureName() == "MyFeature" || _recorder.GetCurrentFeatureName() == "DefaultFeature")
+                        {
+                            Console.WriteLine();
+                            ConsoleHelper.WriteInfo("You are using the default feature name.");
+                            Console.Write("Enter a name for your feature (or press Enter to keep default): ");
+                            
+                            // Use a separate task for reading line to respect cancellation token if needed, 
+                            // but for simplicity here we'll just read line as we are in the processing loop
+                            // Note: This blocks the processing loop, which is fine for this interaction
+                            string? newName = Console.ReadLine();
+                            if (!string.IsNullOrWhiteSpace(newName))
+                            {
+                                _recorder.RenameFeature(newName);
+                            }
+                        }
+
                         ConsoleHelper.WriteInfo("Stopping recording...");
                         _recorder.StopRecording();
                         break; // Exit the loop
+                    }
+                    else if (command.StartsWith("rename "))
+                    {
+                        string newName = input.Substring("rename ".Length).Trim();
+                        if (!string.IsNullOrWhiteSpace(newName))
+                        {
+                            _recorder.RenameFeature(newName);
+                            ConsoleHelper.WriteSuccess($"Feature renamed to: {_recorder.GetCurrentFeatureName()}");
+                        }
+                        else
+                        {
+                            ConsoleHelper.WriteError("Usage: rename <NewFeatureName>");
+                        }
                     }
                     else if (command.StartsWith("new feature "))
                     {
@@ -457,6 +501,7 @@ namespace SpecFlowTestGenerator
             ConsoleHelper.WriteHeader("Recording Active - Available Commands:");
             Console.WriteLine("  stop              - Stop recording and generate files");
             Console.WriteLine("  new feature <n>   - Start recording a new feature");
+            Console.WriteLine("  rename <name>     - Rename the current feature");
             Console.WriteLine("  pause             - Pause recording temporarily");
             Console.WriteLine("  resume            - Resume recording after pause");
             Console.WriteLine("  undo              - Remove last recorded action");

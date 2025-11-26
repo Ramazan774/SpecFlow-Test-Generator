@@ -1,8 +1,9 @@
 using System;
+using System.Linq;
 using System.Text.RegularExpressions;
 using Newtonsoft.Json.Linq;
-using OpenQA.Selenium.DevTools.V136.Page;
-using OpenQA.Selenium.DevTools.V136.Runtime;
+using OpenQA.Selenium.DevTools.V131.Page;
+using OpenQA.Selenium.DevTools.V131.Runtime;
 using SpecFlowTestGenerator.Models;
 using SpecFlowTestGenerator.Utils;
 
@@ -137,15 +138,16 @@ namespace SpecFlowTestGenerator.Core
     }
 
     /// <summary>
-    /// V136 specific event adapter
+    /// V131 specific event adapter
     /// </summary>
-    public class V136EventAdapter : IDevToolsEventAdapter
+    public class V131EventAdapter : IDevToolsEventAdapter
     {
-        private readonly OpenQA.Selenium.DevTools.V136.DevToolsSessionDomains _domains;
-        private EventHandler<OpenQA.Selenium.DevTools.V136.Page.FrameNavigatedEventArgs>? _frameNavigatedHandler;
-        private EventHandler<OpenQA.Selenium.DevTools.V136.Runtime.BindingCalledEventArgs>? _bindingCalledHandler;
+        private readonly OpenQA.Selenium.DevTools.V131.DevToolsSessionDomains _domains;
+        private EventHandler<OpenQA.Selenium.DevTools.V131.Page.FrameNavigatedEventArgs>? _frameNavigatedHandler;
+        private EventHandler<OpenQA.Selenium.DevTools.V131.Runtime.BindingCalledEventArgs>? _bindingCalledHandler;
+        private EventHandler<OpenQA.Selenium.DevTools.V131.Runtime.ConsoleAPICalledEventArgs>? _consoleCalledHandler;
 
-        public V136EventAdapter(OpenQA.Selenium.DevTools.V136.DevToolsSessionDomains domains)
+        public V131EventAdapter(OpenQA.Selenium.DevTools.V131.DevToolsSessionDomains domains)
         {
             _domains = domains ?? throw new ArgumentNullException(nameof(domains));
         }
@@ -161,11 +163,18 @@ namespace SpecFlowTestGenerator.Core
             
             _bindingCalledHandler = (sender, e) => 
                 handler.HandleBindingCalled(e.Name, e.Payload);
+
+            _consoleCalledHandler = (sender, e) =>
+            {
+                var args = string.Join(" ", e.Args.Select(a => a.Value?.ToString() ?? ""));
+                Logger.LogEventHandler($"[Browser Console] {e.Type}: {args}");
+            };
             
             _domains.Page.FrameNavigated += _frameNavigatedHandler;
             _domains.Runtime.BindingCalled += _bindingCalledHandler;
+            _domains.Runtime.ConsoleAPICalled += _consoleCalledHandler;
             
-            Logger.Log("SUCCESS: Registered V136 event handlers");
+            Logger.Log("SUCCESS: Registered V131 event handlers");
         }
 
         public void UnregisterEventHandlers()
@@ -175,8 +184,11 @@ namespace SpecFlowTestGenerator.Core
             
             if (_bindingCalledHandler != null)
                 _domains.Runtime.BindingCalled -= _bindingCalledHandler;
+
+            if (_consoleCalledHandler != null)
+                _domains.Runtime.ConsoleAPICalled -= _consoleCalledHandler;
             
-            Logger.Log("V136 event handlers unregistered");
+            Logger.Log("V131 event handlers unregistered");
         }
     }
 }

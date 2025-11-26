@@ -1,0 +1,28 @@
+{
+    "manifest_version": 3,
+    "name": "SpecFlow Recorder",
+    "version": "1.0",
+    "description": "Records user actions and generates SpecFlow feature and step definition files.",
+    "permissions": [
+        "activeTab",
+        "scripting",
+        "storage",
+        "downloads"
+    ],
+    "action": {
+        "default_popup": "popup.html"
+    },
+    "background": {
+        "service_worker": "background.js"
+    },
+    "content_scripts": [
+        {
+            "matches": [
+                "<all_urls>"
+            ],
+            "js": [
+                "content.js"
+            ]
+        }
+    ]
+}
