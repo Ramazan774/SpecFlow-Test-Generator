@@ -1,7 +1,6 @@
 (function () {
     let isRecording = false;
 
-    // Listen for messages from background
     chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         if (request.command === 'start') {
             isRecording = true;
@@ -12,7 +11,6 @@
         }
     });
 
-    // Check storage on load
     chrome.storage.local.get(['isRecording'], (result) => {
         if (result.isRecording) {
             isRecording = true;
@@ -20,10 +18,8 @@
         }
     });
 
-    // Track input values
     const inputValues = new Map();
 
-    // --- Selector Generation Logic ---
     function getCssPath(el) {
         if (!(el instanceof Element)) return;
         const path = [];
@@ -75,7 +71,6 @@
         if (!el || !el.tagName) return null;
 
         try {
-            // 1. Data Attributes (Best Practice)
             const dataAttrs = ['data-testid', 'data-test-id', 'data-test', 'data-qa'];
             for (const attr of dataAttrs) {
                 if (el.hasAttribute(attr)) {
@@ -85,17 +80,14 @@
                 }
             }
 
-            // 2. ID (if unique)
             if (el.id && isUnique('#' + CSS.escape(el.id))) {
                 return { type: 'Id', value: el.id };
             }
 
-            // 3. Name (for inputs)
             if (el.name && isUnique(`[name="${el.name}"]`)) {
                 return { type: 'Name', value: el.name };
             }
 
-            // 4. Text Content (for buttons, links, labels) - XPath
             if (['BUTTON', 'A', 'LABEL', 'SPAN', 'DIV', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6'].includes(el.tagName)) {
                 const text = el.innerText.trim();
                 if (text && text.length < 50 && !text.includes('"') && !text.includes("'")) {
@@ -106,9 +98,7 @@
                 }
             }
 
-            // 5. Contextual Text (Sibling/Parent)
             if (el.tagName === 'INPUT' || el.tagName === 'BUTTON') {
-                // Check siblings for label
                 let sibling = el.nextElementSibling;
                 while (sibling) {
                     if (sibling.tagName === 'LABEL' && sibling.innerText.trim().length > 0) {
@@ -123,7 +113,6 @@
                     sibling = sibling.nextElementSibling;
                 }
 
-                // Check parent for text
                 const parent = el.parentElement;
                 if (parent && ['LI', 'DIV', 'TR'].includes(parent.tagName)) {
                     const text = parent.innerText.trim();
@@ -136,13 +125,10 @@
                 }
             }
 
-            // 6. Placeholder
             const placeholder = el.getAttribute('placeholder');
             if (placeholder && isUnique(`[placeholder="${placeholder}"]`)) {
                 return { type: 'CssSelector', value: `[placeholder="${placeholder}"]` };
             }
-
-            // 7. Class combination (heuristic)
             if (el.className && typeof el.className === 'string' && el.className.trim().length > 0) {
                 const classes = el.className.split(/\s+/).filter(c => c);
                 if (classes.length > 0) {
@@ -151,13 +137,11 @@
                 }
             }
 
-            // 8. Full CSS Path (Robust fallback)
             const cssPath = getCssPath(el);
             if (cssPath && isUnique(cssPath)) {
                 return { type: 'CssSelector', value: cssPath };
             }
 
-            // 9. XPath Absolute (Final fallback)
             const absXPath = getXPath(el);
             if (absXPath) {
                 return { type: 'XPath', value: absXPath };
@@ -171,7 +155,6 @@
         }
     }
 
-    // Find input element in container or shadow DOM
     function findInputElement(el) {
         if (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT') {
             return el;
@@ -185,7 +168,6 @@
         return null;
     }
 
-    // Track input values
     document.addEventListener('input', function (e) {
         const target = e.target;
         if (!target || !target.tagName) return;
@@ -197,7 +179,6 @@
         }
     }, true);
 
-    // Handle user actions
     function handleEvent(e) {
         if (!isRecording) return;
 
@@ -213,9 +194,6 @@
 
             if (!selector) return;
 
-            // Only record navigation if it's the first action or significant
-            // (Navigation is tricky in extensions, usually handled by checking URL changes in background)
-
             let action = {
                 type: e.type,
                 selector: selector.type,
@@ -228,7 +206,7 @@
             };
 
             if (e.type === 'change') {
-                // Ignore change for now, rely on click/type
+                // Ignore change for now
             }
             else if (e.type === 'click') {
                 action.value = inputValues.get(target) || null;

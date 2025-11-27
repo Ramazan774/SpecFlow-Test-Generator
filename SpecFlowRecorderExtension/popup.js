@@ -6,7 +6,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const actionCountSpan = document.getElementById('actionCount');
     const actionCountContainer = document.getElementById('actionCountContainer');
 
-    // Load state
     chrome.storage.local.get(['isRecording', 'featureName', 'actionCount'], (result) => {
         if (result.isRecording) {
             setRecordingState(true);
@@ -23,7 +22,6 @@ document.addEventListener('DOMContentLoaded', () => {
         chrome.runtime.sendMessage({ command: 'startRecording', featureName: featureName }, (response) => {
             if (response && response.status === 'started') {
                 setRecordingState(true);
-                // Close popup to let user interact with page
                 window.close();
             }
         });
@@ -54,7 +52,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // Listen for updates from background
     chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         if (request.type === 'actionRecorded') {
             actionCountSpan.textContent = request.count;

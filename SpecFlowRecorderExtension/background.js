@@ -5,7 +5,7 @@ let recordedActions = [];
 // Initialize storage
 chrome.storage.local.set({ isRecording: false, actionCount: 0 });
 
-console.log('SpecFlow Recorder Background Service v1.1 Loaded');
+console.log('SpecFlow Recorder Background Service Loaded');
 
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     if (request.command === 'startRecording') {
@@ -16,10 +16,10 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         chrome.storage.local.set({
             isRecording: true,
             featureName: currentFeatureName,
+            recordedActions: [],
             actionCount: 0
         });
 
-        // Inject content script into active tab
         chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
             if (tabs[0]) {
                 chrome.tabs.sendMessage(tabs[0].id, { command: 'start' });
@@ -32,7 +32,6 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         isRecording = false;
         chrome.storage.local.set({ isRecording: false });
 
-        // Tell content script to stop
         chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
             if (tabs[0]) {
                 try {
@@ -45,7 +44,6 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
             }
         });
 
-        // Retrieve actions from storage before generating
         chrome.storage.local.get(['recordedActions', 'featureName'], (result) => {
             const actions = result.recordedActions || [];
             const featureName = result.featureName || 'MyFeature';
@@ -55,7 +53,6 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         sendResponse({ status: 'stopped' });
     }
     else if (request.command === 'recordAction') {
-        // We need to get the current list first to append
         chrome.storage.local.get(['recordedActions', 'isRecording'], (result) => {
             if (result.isRecording) {
                 const actions = result.recordedActions || [];
@@ -66,7 +63,6 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                     actionCount: actions.length
                 });
 
-                // Notify popup if open
                 chrome.runtime.sendMessage({
                     type: 'actionRecorded',
                     count: actions.length
@@ -84,9 +80,8 @@ function generateFiles(actions, featureName) {
     const featureContent = generateFeatureFile(actions, featureName);
     const stepsContent = generateStepsFile(actions, featureName);
 
-    // Use Data URLs (Base64) which are more reliable in Service Workers than Blob URLs
-    const featureDataUrl = 'data:text/plain;base64,' + btoa(unescape(encodeURIComponent(featureContent)));
-    const stepsDataUrl = 'data:text/plain;base64,' + btoa(unescape(encodeURIComponent(stepsContent)));
+    const featureDataUrl = 'data:text/plain;base64,' + utf8_to_b64(featureContent);
+    const stepsDataUrl = 'data:text/plain;base64,' + utf8_to_b64(stepsContent);
 
     chrome.downloads.download({
         url: featureDataUrl,
@@ -98,7 +93,6 @@ function generateFiles(actions, featureName) {
         } else {
             console.log('Feature download started, ID:', downloadId);
 
-            // Download Steps File
             chrome.downloads.download({
                 url: stepsDataUrl,
                 filename: `${featureName}Steps.cs`,
@@ -118,8 +112,6 @@ function generateFeatureFile(actions, featureName) {
     let content = `Feature: ${featureName}\n\n`;
     content += `  Scenario: Recorded Scenario\n`;
 
-    // Simple deduplication logic could go here
-
     actions.forEach(action => {
         switch (action.type) {
             case 'navigate':
@@ -129,10 +121,10 @@ function generateFeatureFile(actions, featureName) {
                 content += `    When I click the element with ${action.selector} "${action.selectorValue}"\n`;
                 break;
             case 'type':
-                content += `    When I type "${action.value}" into element with ${action.selector} "${action.selectorValue}"\n`;
+                content += `    Then I type "${action.value}" into element with ${action.selector} "${action.selectorValue}"\n`;
                 break;
             case 'enterkey':
-                content += `    When I type "${action.value}" and press Enter in element with ${action.selector} "${action.selectorValue}"\n`;
+                content += `    Then I type "${action.value}" and press Enter in element with ${action.selector} "${action.selectorValue}"\n`;
                 break;
         }
     });
@@ -218,7 +210,7 @@ namespace SpecFlowTests.Steps
         else if (action.type === 'type') {
             if (!signatures.has('TypeIntoElement')) {
                 content += `
-        [When(@"I type ""(.*)"" into element with (.*?) ""(.*?)""")]
+        [Then(@"I type ""(.*)"" into element with (.*?) ""(.*?)""")]
         public void TypeIntoElement(string text, string selectorType, string selectorValue)
         {
             var element = GetElement(selectorType, selectorValue);
@@ -233,7 +225,7 @@ namespace SpecFlowTests.Steps
         else if (action.type === 'enterkey') {
             if (!signatures.has('TypeAndEnter')) {
                 content += `
-        [When(@"I type ""(.*)"" and press Enter in element with (.*?) ""(.*?)""")]
+        [Then(@"I type ""(.*)"" and press Enter in element with (.*?) ""(.*?)""")]
         public void TypeAndEnter(string text, string selectorType, string selectorValue)
         {
             var element = GetElement(selectorType, selectorValue);
@@ -267,4 +259,11 @@ namespace SpecFlowTests.Steps
 }`;
 
     return content;
+}
+
+function utf8_to_b64(str) {
+    return btoa(encodeURIComponent(str).replace(/%([0-9A-F]{2})/g,
+        function toSolidBytes(match, p1) {
+            return String.fromCharCode('0x' + p1);
+        }));
 }
