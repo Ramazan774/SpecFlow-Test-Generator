@@ -162,6 +162,10 @@ function generateFeatureFile(actions, featureName) {
                 currentKeyword = 'Then';
                 stepText = `I type "${action.value}" into element with ${action.selector} "${action.selectorValue}"`;
                 break;
+            case 'select':
+                currentKeyword = 'Then';
+                stepText = `I select "${action.selectedText}" from dropdown with ${action.selector} "${action.selectorValue}"`;
+                break;
             case 'enterkey':
                 currentKeyword = 'Then';
                 stepText = `I type "${action.value}" and press Enter in element with ${action.selector} "${action.selectorValue}"`;
@@ -183,6 +187,7 @@ function generateStepsFile(actions, featureName) {
     let content = `using System;
 using Reqnroll;
 using OpenQA.Selenium;
+using OpenQA.Selenium.Support.UI;
 using System.Threading;
 
 namespace ReqnrollTests.Steps
@@ -300,6 +305,21 @@ namespace ReqnrollTests.Steps
         }
 `;
                 signatures.add('TypeAndEnter');
+            }
+        }
+        else if (action.type === 'select') {
+            if (!signatures.has('SelectFromDropdown')) {
+                content += `
+        [Then(@"I select ""(.*)"" from dropdown with (.*?) ""(.*?)""")]
+        public void SelectFromDropdown(string optionText, string selectorType, string selectorValue)
+        {
+            var element = GetElement(selectorType, selectorValue);
+            var select = new SelectElement(element);
+            select.SelectByText(optionText);
+            Thread.Sleep(500);
+        }
+`;
+                signatures.add('SelectFromDropdown');
             }
         }
     });

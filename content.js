@@ -357,8 +357,12 @@ if (typeof browser !== 'undefined') globalThis.chrome = browser;
             }
             else if (e.type === 'change') {
                 if (target.tagName === 'SELECT') {
-                    action.type = 'type';
+                    action.type = 'select';
                     action.value = target.value;
+                    // Get the selected option's visible text
+                    const selectedOption = target.options[target.selectedIndex];
+                    action.selectedText = selectedOption ? selectedOption.text : target.value;
+                    action.selectedValue = target.value;
                     lastRecordedValues.set(target, target.value);
                     sendMessageSafe({ command: 'recordAction', action: action });
                 }
