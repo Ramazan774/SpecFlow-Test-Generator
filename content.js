@@ -21,6 +21,8 @@ if (typeof browser !== 'undefined') globalThis.chrome = browser;
 
     const inputValues = new Map();
     const lastRecordedValues = new Map();
+    const lastRecordedAction = { selector: null, type: null, timestamp: 0 };
+    const checkboxStates = new Map(); // Track checkbox/radio checked states
 
     function getCssPath(el) {
         if (!(el instanceof Element)) return;
@@ -325,9 +327,136 @@ if (typeof browser !== 'undefined') globalThis.chrome = browser;
         }
 
         try {
-            const inputEl = findInputElement(target);
-            const value = inputEl ? inputEl.value : (inputValues.get(target) || target.value);
-            const selector = getBestSelector(target);
+            function findCheckboxInElement(element, depth = 0) {
+                if (!element || depth > 5) return null; // Limit recursion depth
+
+                console.log('Reqnroll Recorder: Searching in', element.tagName, 'at depth', depth);
+
+                let checkbox = element.querySelector('input[type="checkbox"], input[type="radio"]');
+                if (checkbox) {
+                    console.log('Reqnroll Recorder: Found input checkbox in regular DOM');
+                    return checkbox;
+                }
+
+                let ariaCheckbox = element.querySelector('[role="checkbox"], [role="radio"]');
+                if (ariaCheckbox) {
+                    console.log('Reqnroll Recorder: Found ARIA checkbox:', ariaCheckbox);
+                    return ariaCheckbox;
+                }
+
+                if (element.shadowRoot) {
+                    console.log('Reqnroll Recorder: Searching in shadowRoot of', element.tagName);
+
+                    checkbox = element.shadowRoot.querySelector('input[type="checkbox"], input[type="radio"]');
+                    if (checkbox) {
+                        console.log('Reqnroll Recorder: Found input checkbox in shadow DOM');
+                        return checkbox;
+                    }
+                    ariaCheckbox = element.shadowRoot.querySelector('[role="checkbox"], [role="radio"]');
+                    if (ariaCheckbox) {
+                        console.log('Reqnroll Recorder: Found ARIA checkbox in shadow DOM');
+                        return ariaCheckbox;
+                    }
+
+                    const shadowChildren = element.shadowRoot.querySelectorAll('*');
+                    for (let child of shadowChildren) {
+                        if (child.shadowRoot) {
+                            const nestedCheckbox = findCheckboxInElement(child, depth + 1);
+                            if (nestedCheckbox) return nestedCheckbox;
+                        }
+                    }
+                }
+
+                return null;
+            }
+
+            let actualTarget = target;
+            if (e.type === 'click') {
+                console.log('Reqnroll Recorder: Click detected on', target.tagName, target.className, target.id);
+
+                const isWrapperElement = ['DIV', 'SPAN', 'LABEL', 'LI', 'P'].includes(target.tagName);
+                const isInputElement = target.tagName === 'INPUT';
+
+                if (target.shadowRoot) {
+                    console.log('Reqnroll Recorder: Target has shadow DOM, searching inside...');
+                }
+
+                if (target.tagName === 'LABEL' && target.htmlFor) {
+                    const associatedInput = document.getElementById(target.htmlFor);
+                    if (associatedInput && ['checkbox', 'radio'].includes(associatedInput.type)) {
+                        console.log('Reqnroll Recorder: Found associated input via label htmlFor:', associatedInput);
+                        actualTarget = associatedInput;
+                    }
+                }
+                else if (isWrapperElement || (isInputElement && ['checkbox', 'radio'].includes(target.type))) {
+                    const preliminarySelector = getBestSelector(target);
+                    const hasGoodSelector = preliminarySelector &&
+                        (preliminarySelector.type === 'Id' ||
+                            preliminarySelector.type === 'Name' ||
+                            preliminarySelector.type === 'XPath' ||
+                            (preliminarySelector.type === 'CssSelector' && !preliminarySelector.value.includes('>')));
+
+                    if (!hasGoodSelector || (isInputElement && ['checkbox', 'radio'].includes(target.type))) {
+                        let checkboxInput = findCheckboxInElement(target);
+                        if (checkboxInput) {
+                            const targetRect = target.getBoundingClientRect();
+                            const checkboxRect = checkboxInput.getBoundingClientRect();
+                            const distance = Math.sqrt(
+                                Math.pow(targetRect.left - checkboxRect.left, 2) +
+                                Math.pow(targetRect.top - checkboxRect.top, 2)
+                            );
+
+                            if (distance < 100) {
+                                console.log('Reqnroll Recorder: Found checkbox in target element:', checkboxInput);
+                                actualTarget = checkboxInput;
+                            } else {
+                                console.log('Reqnroll Recorder: Found checkbox but too far away (', distance, 'px), ignoring');
+                                checkboxInput = null;
+                            }
+                        }
+
+                        if (!checkboxInput && isWrapperElement && !hasGoodSelector) {
+                            let parent = target.parentElement;
+                            let levelsUp = 0;
+
+                            while (parent && levelsUp < 2) {
+                                checkboxInput = findCheckboxInElement(parent);
+                                if (checkboxInput) {
+                                    const targetRect = target.getBoundingClientRect();
+                                    const checkboxRect = checkboxInput.getBoundingClientRect();
+                                    const distance = Math.sqrt(
+                                        Math.pow(targetRect.left - checkboxRect.left, 2) +
+                                        Math.pow(targetRect.top - checkboxRect.top, 2)
+                                    );
+
+                                    if (distance < 100) {
+                                        console.log('Reqnroll Recorder: Found checkbox in parent level', levelsUp, ':', checkboxInput);
+                                        actualTarget = checkboxInput;
+                                        break;
+                                    } else {
+                                        console.log('Reqnroll Recorder: Found checkbox in parent but too far (', distance, 'px)');
+                                        checkboxInput = null;
+                                    }
+                                }
+                                parent = parent.parentElement;
+                                levelsUp++;
+                            }
+
+                            if (!checkboxInput) {
+                                console.log('Reqnroll Recorder: No checkbox found, using original target');
+                            }
+                        }
+                    } else {
+                        console.log('Reqnroll Recorder: Element has good selector, not searching for checkboxes');
+                    }
+                }
+
+                console.log('Reqnroll Recorder: Recording element:', actualTarget.tagName, 'ID:', actualTarget.id, 'Type:', actualTarget.type);
+            }
+
+            const inputEl = findInputElement(actualTarget);
+            const value = inputEl ? inputEl.value : (inputValues.get(actualTarget) || actualTarget.value);
+            const selector = getBestSelector(actualTarget);
 
             if (!selector) return;
 
@@ -337,45 +466,91 @@ if (typeof browser !== 'undefined') globalThis.chrome = browser;
                 selectorValue: selector.value,
                 value: value,
                 key: e.key,
-                tagName: target.tagName,
-                elementType: target.type,
+                tagName: actualTarget.tagName,
+                elementType: actualTarget.type,
                 url: window.location.href
             };
 
             if (e.type === 'blur') {
-                if (['INPUT', 'TEXTAREA'].includes(target.tagName)) {
-                    const currentValue = target.value;
-                    const lastValue = lastRecordedValues.get(target);
+                if (actualTarget.type === 'checkbox' || actualTarget.type === 'radio') {
+                    return;
+                }
+
+                if (['INPUT', 'TEXTAREA'].includes(actualTarget.tagName)) {
+                    const currentValue = actualTarget.value;
+                    const lastValue = lastRecordedValues.get(actualTarget);
 
                     if (currentValue && currentValue !== lastValue) {
                         action.type = 'type';
                         action.value = currentValue;
-                        lastRecordedValues.set(target, currentValue);
+                        lastRecordedValues.set(actualTarget, currentValue);
                         sendMessageSafe({ command: 'recordAction', action: action });
                     }
                 }
             }
             else if (e.type === 'change') {
-                if (target.tagName === 'SELECT') {
+                if (actualTarget.type === 'checkbox' || actualTarget.type === 'radio') {
+                    return;
+                }
+
+                if (actualTarget.tagName === 'SELECT') {
                     action.type = 'select';
-                    action.value = target.value;
-                    // Get the selected option's visible text
-                    const selectedOption = target.options[target.selectedIndex];
-                    action.selectedText = selectedOption ? selectedOption.text : target.value;
-                    action.selectedValue = target.value;
-                    lastRecordedValues.set(target, target.value);
+                    action.value = actualTarget.value;
+                    const selectedOption = actualTarget.options[actualTarget.selectedIndex];
+                    action.selectedText = selectedOption ? selectedOption.text : actualTarget.value;
+                    action.selectedValue = actualTarget.value;
+                    lastRecordedValues.set(actualTarget, actualTarget.value);
                     sendMessageSafe({ command: 'recordAction', action: action });
                 }
             }
             else if (e.type === 'click') {
-                const isSubmitClick = ['BUTTON', 'A', 'INPUT'].includes(target.tagName) &&
-                    target.type !== 'text' &&
-                    target.type !== 'search';
+                const now = Date.now();
+                const selectorKey = `${selector.type}:${selector.value}`;
+
+                if (lastRecordedAction.selector === selectorKey &&
+                    lastRecordedAction.type === 'click' &&
+                    (now - lastRecordedAction.timestamp) < 500) {
+                    console.log('Reqnroll Recorder: Ignoring duplicate click on', selectorKey);
+                    return;
+                }
+
+                if (actualTarget.type === 'checkbox' || actualTarget.type === 'radio') {
+                    setTimeout(() => {
+                        const isChecked = actualTarget.checked;
+                        const previousState = checkboxStates.get(actualTarget);
+
+                        console.log('Reqnroll Recorder: Checkbox/Radio', actualTarget.type, 'checked:', isChecked);
+
+                        if (previousState !== isChecked) {
+                            checkboxStates.set(actualTarget, isChecked);
+
+                            const checkAction = {
+                                type: actualTarget.type === 'checkbox' ? 'checkbox' : 'radio',
+                                selector: selector.type,
+                                selectorValue: selector.value,
+                                value: isChecked ? 'check' : 'uncheck',
+                                checked: isChecked,
+                                tagName: actualTarget.tagName,
+                                elementType: actualTarget.type,
+                                url: window.location.href
+                            };
+
+                            sendMessageSafe({ command: 'recordAction', action: checkAction });
+                            lastRecordedAction.selector = selectorKey;
+                            lastRecordedAction.type = actualTarget.type;
+                            lastRecordedAction.timestamp = now;
+                        }
+                    }, 50);
+                    return;
+                }
+
+                const isSubmitClick = ['BUTTON', 'A', 'INPUT'].includes(actualTarget.tagName) &&
+                    actualTarget.type !== 'text' &&
+                    actualTarget.type !== 'search';
 
                 if (isSubmitClick) {
-                    console.log('Reqnroll Recorder: Checking for uncommitted input before click on', target.tagName);
+                    console.log('Reqnroll Recorder: Checking for uncommitted input before click on', actualTarget.tagName);
 
-                    // Check the currently focused element
                     const activeElement = document.activeElement;
                     if (activeElement &&
                         (activeElement.tagName === 'INPUT' || activeElement.tagName === 'TEXTAREA')) {
@@ -437,8 +612,12 @@ if (typeof browser !== 'undefined') globalThis.chrome = browser;
                     });
                 }
 
-                action.value = inputValues.get(target) || null;
+                action.value = inputValues.get(actualTarget) || null;
                 sendMessageSafe({ command: 'recordAction', action: action });
+
+                lastRecordedAction.selector = selectorKey;
+                lastRecordedAction.type = 'click';
+                lastRecordedAction.timestamp = now;
             }
             else if (e.type === 'keydown' && e.key === 'Enter') {
                 action.type = 'enterkey';

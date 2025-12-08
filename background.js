@@ -162,6 +162,16 @@ function generateFeatureFile(actions, featureName) {
                 currentKeyword = 'Then';
                 stepText = `I type "${action.value}" into element with ${action.selector} "${action.selectorValue}"`;
                 break;
+            case 'checkbox':
+                currentKeyword = 'When';
+                stepText = action.checked
+                    ? `I check the checkbox with ${action.selector} "${action.selectorValue}"`
+                    : `I uncheck the checkbox with ${action.selector} "${action.selectorValue}"`;
+                break;
+            case 'radio':
+                currentKeyword = 'When';
+                stepText = `I select the radio button with ${action.selector} "${action.selectorValue}"`;
+                break;
             case 'select':
                 currentKeyword = 'Then';
                 stepText = `I select "${action.selectedText}" from dropdown with ${action.selector} "${action.selectorValue}"`;
@@ -320,6 +330,51 @@ namespace ReqnrollTests.Steps
         }
 `;
                 signatures.add('SelectFromDropdown');
+            }
+        }
+        else if (action.type === 'checkbox') {
+            if (!signatures.has('CheckCheckbox')) {
+                content += `
+        [When(@"I check the checkbox with (.*?) ""(.*?)""")]
+        public void CheckCheckbox(string selectorType, string selectorValue)
+        {
+            var element = GetElement(selectorType, selectorValue);
+            if (!element.Selected)
+            {
+                element.Click();
+            }
+            Thread.Sleep(300);
+        }
+
+        [When(@"I uncheck the checkbox with (.*?) ""(.*?)""")]
+        public void UncheckCheckbox(string selectorType, string selectorValue)
+        {
+            var element = GetElement(selectorType, selectorValue);
+            if (element.Selected)
+            {
+                element.Click();
+            }
+            Thread.Sleep(300);
+        }
+`;
+                signatures.add('CheckCheckbox');
+            }
+        }
+        else if (action.type === 'radio') {
+            if (!signatures.has('SelectRadioButton')) {
+                content += `
+        [When(@"I select the radio button with (.*?) ""(.*?)""")]
+        public void SelectRadioButton(string selectorType, string selectorValue)
+        {
+            var element = GetElement(selectorType, selectorValue);
+            if (!element.Selected)
+            {
+                element.Click();
+            }
+            Thread.Sleep(300);
+        }
+`;
+                signatures.add('SelectRadioButton');
             }
         }
     });
