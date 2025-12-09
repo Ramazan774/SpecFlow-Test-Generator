@@ -1,6 +1,6 @@
 # Reqnroll Recorder
 
-A powerful Chrome Extension that records your browser interactions and automatically generates production-ready **Reqnroll (Gherkin)** feature files and **Selenium C#** step definitions.
+A powerful browser Extension that records your Chrome and Firefox browser interactions and automatically generates production-ready **Reqnroll (Gherkin)** feature files and **Selenium C#** step definitions.
 
 Features
 
@@ -10,7 +10,7 @@ Features
 - **Robust Code**: Generates C# code with built-in `WebDriverWait` and hover handling for stability.
 - **Session Management**: Persists recording state even if you close the popup or reload the page.
 
-## Installation
+## Installation (Chrome)
 
 1.  Clone this repository.
 2.  Open Chrome and navigate to `chrome://extensions/`.
